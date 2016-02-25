@@ -42,7 +42,8 @@ class HuffmanCoder {
 public:
   // len(frequency) = symbols
   HuffmanCoder(uint64_t symbols, uint64_t *frequency);
-  HuffmanCoder(uint64_t *bp, uint64_t len);
+  HuffmanCoder(uint64_t symbols, uint64_t *bits, uint64_t len);
+  virtual ~HuffmanCoder();
   // encode one symbol.
   void encode(uint64_t symbol, uint64_t **code_ptr, uint64_t *len_ptr);
   // encode symbols.
@@ -52,12 +53,8 @@ public:
   // decode codewords.
   void decode(uint64_t *codes, uint64_t len, uint64_t **symbols_ptr, uint64_t *len_ptr);
 
-  // export flags
-  void usedSymbols(uint64_t **flags_ptr, uint64_t *len_ptr);
   // export Huffman tree
-  void huffmanTree2Bits(uint64_t **bits_ptr, uint64_t *len_ptr);
-  void huffmanTree2BP(uint64_t **bp_ptr, uint64_t *len_ptr);
-  virtual ~HuffmanCoder();
+  void encodeHuffmanTree(uint64_t **bits_ptr, uint64_t *len_ptr);
 private:
   uint64_t _symbols;
   HuffmanTree *_tree;

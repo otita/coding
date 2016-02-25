@@ -30,8 +30,10 @@ THE SOFTWARE.
 #include <queue>
 
 #include "HuffmanCoder.h"
+#include "BitStream.h"
 
 using namespace std;
+using namespace otita::io;
 
 namespace otita {
 
@@ -43,7 +45,11 @@ class CompareNodePtr;
 class HuffmanTree {
 public:
   HuffmanTree(uint64_t symbols, uint64_t *frequency);
+  HuffmanTree(uint64_t symbols, uint64_t *bits, uint64_t len);
   virtual ~HuffmanTree();
+  uint64_t size();
+  uint64_t leafSize();
+  void encodeTree(uint64_t **bits_ptr, uint64_t *len_ptr);
 private:
   uint64_t _symbols;
   HuffmanTreeNode *_root;
@@ -53,6 +59,7 @@ private:
 
 class HuffmanTreeNode {
 public:
+  HuffmanTreeNode();
   HuffmanTreeNode(uint64_t symbol, uint64_t frequency);
   HuffmanTreeNode(HuffmanTreeNode *a, HuffmanTreeNode *b);
   HuffmanTreeNode(const HuffmanTreeNode &other);
@@ -60,6 +67,9 @@ public:
   HuffmanTreeNode &operator =(const HuffmanTreeNode &other);
   HuffmanTreeNode &operator =(HuffmanTreeNode &&other);
   virtual ~HuffmanTreeNode();
+  uint64_t size();
+  void setLeft(HuffmanTreeNode *left);
+  void setRight(HuffmanTreeNode *right);
 private:
   uint64_t _symbol;
   uint64_t _frequency;
@@ -69,6 +79,7 @@ private:
 
   friend class CompareNodePtr;
   friend class HuffmanCoder;
+  friend class HuffmanTree;
 };
 
 
@@ -76,6 +87,15 @@ private:
 HuffmanCoder::HuffmanCoder(uint64_t symbols, uint64_t *frequency) {
   _symbols = symbols;
   _tree = new HuffmanTree(symbols, frequency);
+}
+
+HuffmanCoder::HuffmanCoder(uint64_t symbols, uint64_t *bits, uint64_t len) {
+  _symbols = symbols;
+  _tree = new HuffmanTree(symbols, bits, len);
+}
+
+HuffmanCoder::~HuffmanCoder() {
+  delete _tree;
 }
 
 void HuffmanCoder::encode(uint64_t symbol, uint64_t **code_ptr, uint64_t *len_ptr) {
@@ -184,10 +204,6 @@ void HuffmanCoder::decode(uint64_t *codes, uint64_t len, uint64_t **symbols_ptr,
   }
 }
 
-HuffmanCoder::~HuffmanCoder() {
-  delete _tree;
-}
-
 void HuffmanCoder::_decode(uint64_t *codes, uint64_t *pos_ptr, uint64_t *symbol_ptr) {
   uint64_t &pos = *pos_ptr;
   HuffmanTreeNode *node = _tree->_root;
@@ -208,6 +224,9 @@ void HuffmanCoder::_decode(uint64_t *codes, uint64_t *pos_ptr, uint64_t *symbol_
   }
 }
 
+void HuffmanCoder::encodeHuffmanTree(uint64_t **bits_ptr, uint64_t *len_ptr) {
+  _tree->encodeTree(bits_ptr, len_ptr);
+}
 
 // implementation of HuffmanTree
 class CompareNodePtr {
@@ -222,7 +241,7 @@ public:
 
 HuffmanTree::HuffmanTree(uint64_t symbols, uint64_t *frequency) {
   using symbol_priority_queue = priority_queue<HuffmanTreeNode *, vector<HuffmanTreeNode *>, CompareNodePtr>;
-
+  _symbols = symbols;
   _leaves = new HuffmanTreeNode *[symbols];
   symbol_priority_queue p_queue;
   for (uint64_t c = 0; c < symbols; c++) {
@@ -246,9 +265,126 @@ HuffmanTree::HuffmanTree(uint64_t symbols, uint64_t *frequency) {
   _root = p_queue.top();
 }
 
+HuffmanTree::HuffmanTree(uint64_t symbols, uint64_t *bits, uint64_t len) {
+  _symbols = symbols;
+  _leaves = new HuffmanTreeNode *[_symbols];
+  for (uint64_t i = 0; i < _symbols; i++) {
+    _leaves[i] = nullptr;
+  }
+  BitReader reader = BitReader(bits, len);
+  uint64_t w = 0;
+  uint64_t s_size = _symbols - 1;
+  while (s_size) {
+    w++;
+    s_size >>= 1;
+  }
+
+  uint64_t pos = 0;
+  vector<HuffmanTreeNode *> stack;
+  stack.reserve(symbols);
+  while (pos < len) {
+    uint64_t bit;
+    reader.read(&bit, 1);
+    pos++;
+    HuffmanTreeNode *node;
+    if (bit) {
+      // leaf node
+      uint64_t symbol;
+      reader.read(&symbol, w);
+      pos += w;
+      node = new HuffmanTreeNode(symbol, 0);
+      _leaves[symbol] = node;
+    }
+    else {
+      // internal node
+      node = new HuffmanTreeNode();
+    }
+    if (!stack.empty()) {
+      HuffmanTreeNode *&back = stack.back();
+      if (!back->_left) {
+        back->setLeft(node);
+      }
+      else if (!back->_right) {
+        back->setRight(node);
+        stack.pop_back();
+      }
+    }
+    else {
+      _root = node;
+    }
+    if (!bit) {
+      stack.push_back(node);
+    }
+  }
+}
+
 HuffmanTree::~HuffmanTree() {
   delete _root;
   delete [] _leaves;
+}
+
+uint64_t HuffmanTree::size() {
+  return _root->size();
+}
+
+uint64_t HuffmanTree::leafSize() {
+  uint64_t size = 0;
+  for (uint64_t i = 0; i < _symbols; i++) {
+    if (_leaves[i]) {
+      size++;
+    }
+  }
+  return size;
+}
+
+void HuffmanTree::encodeTree(uint64_t **bits_ptr, uint64_t *len_ptr) {
+  if (!len_ptr) {
+    return;
+  }
+  uint64_t t_size = size();
+  uint64_t l_size = leafSize();
+  uint64_t w = 0;
+  uint64_t s_size = _symbols - 1;
+  while (s_size) {
+    w++;
+    s_size >>= 1;
+  }
+  *len_ptr = t_size + w * l_size;
+  
+  if (!bits_ptr) {
+    return;
+  }
+  
+  uint64_t size = (*len_ptr + 64 - 1) / 64;
+  *bits_ptr = new uint64_t[size];
+  BitWriter writer = BitWriter(*bits_ptr, *len_ptr);
+
+  vector<HuffmanTreeNode *> stack;
+  stack.reserve(t_size);
+  stack.push_back(_root);
+  while (!stack.empty()) {
+    HuffmanTreeNode *node = stack.back();
+    stack.pop_back();
+    if (!(node->_left || node->_right)) {
+      // leaf node
+      writer.write(1, 1);
+      writer.write(node->_symbol, w);
+    }
+    else {
+      // internal node
+      writer.write(uint64_t(0), 1);
+      stack.push_back(node->_right);
+      stack.push_back(node->_left);
+    }
+  }
+}
+
+HuffmanTreeNode::HuffmanTreeNode() {
+  _symbol = 0;
+  _frequency = 0;
+  _parent = nullptr;
+  _left = nullptr;
+  _right = nullptr;
 }
 
 HuffmanTreeNode::HuffmanTreeNode(uint64_t symbol, uint64_t frequency) {
@@ -392,6 +528,33 @@ HuffmanTreeNode::~HuffmanTreeNode() {
   if (_right) {
     delete _right;
   }
+}
+
+uint64_t HuffmanTreeNode::size() {
+  uint64_t size = 1;
+  if (_left) {
+    size += _left->size();
+  }
+  if (_right) {
+    size += _right->size();
+  }
+  return size;
+}
+
+void HuffmanTreeNode::setLeft(HuffmanTreeNode *left) {
+  if (_left) {
+    _left->_parent = nullptr;
+  }
+  _left = left;
+  _left->_parent = this;
+}
+
+void HuffmanTreeNode::setRight(HuffmanTreeNode *right) {
+  if (_right) {
+    _right->_parent = nullptr;
+  }
+  _right = right;
+  _right->_parent = this;
 }
 
 } // coding
