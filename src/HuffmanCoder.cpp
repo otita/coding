@@ -155,26 +155,18 @@ void HuffmanCoder::encode(uint64_t *symbols, uint64_t len, uint64_t **codes_ptr,
     (*codes_ptr)[i] = 0;
   }
 
-  uint64_t pos = 0;
+  BitWriter writer = BitWriter(*codes_ptr, *len_ptr);
+
   for (uint64_t i = 0; i < len; i++) {
     uint64_t *code_ptr;
     uint64_t code_len;
     encode(symbols[i], &code_ptr, &code_len);
 
-    size_t code_size = (code_len + 64 - 1) / 64;
-    uint64_t idx = pos / 64;
-    uint64_t shift = pos % 64;
-    for (size_t i = 0; i < code_size; i++) {
-      (*codes_ptr)[idx] |= code_ptr[i] << shift;
-      if (shift) {
-        (*codes_ptr)[idx + 1] = code_ptr[i] >> (64 - shift);
-      }
-      idx++;
-    }
+    writer.write(code_ptr, code_len);
 
-    pos += code_len;
     delete [] code_ptr;
   }
+  writer.close();
 }
 
 void HuffmanCoder::decode(uint64_t *code, uint64_t len, uint64_t *symbol_ptr) {
@@ -282,6 +274,7 @@ HuffmanTree::HuffmanTree(uint64_t symbols, uint64_t *bits, uint64_t len) {
   uint64_t pos = 0;
   vector<HuffmanTreeNode *> stack;
   stack.reserve(symbols);
+  static uint64_t num = 0;
   while (pos < len) {
     uint64_t bit;
     reader.read(&bit, 1);
@@ -298,6 +291,7 @@ HuffmanTree::HuffmanTree(uint64_t symbols, uint64_t *bits, uint64_t len) {
     else {
       // internal node
       node = new HuffmanTreeNode();
+      node->_symbol = num++;
     }
     if (!stack.empty()) {
       HuffmanTreeNode *&back = stack.back();
@@ -357,10 +351,13 @@ void HuffmanTree::encodeTree(uint64_t **bits_ptr, uint64_t *len_ptr) {
   
   uint64_t size = (*len_ptr + 64 - 1) / 64;
   *bits_ptr = new uint64_t[size];
+  for (uint64_t i = 0; i < size; i++) {
+    (*bits_ptr)[i] = 0;
+  }
   BitWriter writer = BitWriter(*bits_ptr, *len_ptr);
 
   vector<HuffmanTreeNode *> stack;
-  stack.reserve(t_size);
+  stack.reserve(_symbols);
   stack.push_back(_root);
   while (!stack.empty()) {
     HuffmanTreeNode *node = stack.back();
