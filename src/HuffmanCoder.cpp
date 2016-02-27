@@ -274,7 +274,6 @@ HuffmanTree::HuffmanTree(uint64_t symbols, uint64_t *bits, uint64_t len) {
   uint64_t pos = 0;
   vector<HuffmanTreeNode *> stack;
   stack.reserve(symbols);
-  static uint64_t num = 0;
   while (pos < len) {
     uint64_t bit;
     reader.read(&bit, 1);
@@ -291,7 +290,6 @@ HuffmanTree::HuffmanTree(uint64_t symbols, uint64_t *bits, uint64_t len) {
     else {
       // internal node
       node = new HuffmanTreeNode();
-      node->_symbol = num++;
     }
     if (!stack.empty()) {
       HuffmanTreeNode *&back = stack.back();
