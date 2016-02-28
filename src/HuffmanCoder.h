@@ -31,6 +31,7 @@ THE SOFTWARE.
 #define _HUFFMAN_CODER_H_
 
 #include <cstdint>
+#include <unordered_map>
 
 namespace otita {
 
@@ -40,8 +41,7 @@ class HuffmanTree;
 
 class HuffmanCoder {
 public:
-  // len(frequency) = symbols
-  HuffmanCoder(uint64_t symbols, uint64_t *frequency);
+  HuffmanCoder(uint64_t symbols, const ::std::unordered_map<uint64_t, uint64_t> &frequency);
   HuffmanCoder(uint64_t symbols, uint64_t *bits, uint64_t len);
   virtual ~HuffmanCoder();
   // encode one symbol.

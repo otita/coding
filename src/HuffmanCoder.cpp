@@ -44,7 +44,7 @@ class CompareNodePtr;
 
 class HuffmanTree {
 public:
-  HuffmanTree(uint64_t symbols, uint64_t *frequency);
+  HuffmanTree(uint64_t symbols, const unordered_map<uint64_t, uint64_t> &frequency);
   HuffmanTree(uint64_t symbols, uint64_t *bits, uint64_t len);
   virtual ~HuffmanTree();
   uint64_t size();
@@ -53,7 +53,7 @@ public:
 private:
   uint64_t _symbols;
   HuffmanTreeNode *_root;
-  HuffmanTreeNode **_leaves;
+  unordered_map<uint64_t, HuffmanTreeNode *> _leaves;
   friend class HuffmanCoder;
 };
 
@@ -84,7 +84,7 @@ private:
 
 
 // implementation of HuffmanCoder
-HuffmanCoder::HuffmanCoder(uint64_t symbols, uint64_t *frequency) {
+HuffmanCoder::HuffmanCoder(uint64_t symbols, const unordered_map<uint64_t, uint64_t> &frequency) {
   _symbols = symbols;
   _tree = new HuffmanTree(symbols, frequency);
 }
@@ -231,19 +231,18 @@ public:
   }
 };
 
-HuffmanTree::HuffmanTree(uint64_t symbols, uint64_t *frequency) {
+HuffmanTree::HuffmanTree(uint64_t symbols, const unordered_map<uint64_t, uint64_t> &frequency) {
   using symbol_priority_queue = priority_queue<HuffmanTreeNode *, vector<HuffmanTreeNode *>, CompareNodePtr>;
   _symbols = symbols;
-  _leaves = new HuffmanTreeNode *[symbols];
   symbol_priority_queue p_queue;
+  _leaves.reserve(frequency.size());
   for (uint64_t c = 0; c < symbols; c++) {
     HuffmanTreeNode *node = nullptr;
-    if (frequency[c]) {
-      node = new HuffmanTreeNode(c, frequency[c]);
-    }
-    _leaves[c] = node;
-    if (node) {
-      p_queue.push(node); 
+    auto it = frequency.find(c);
+    if (it != frequency.end()) {
+      node = new HuffmanTreeNode(c, it->second);
+      _leaves[c] = node;
+      p_queue.push(node);
     }
   }
 
@@ -259,10 +258,6 @@ HuffmanTree::HuffmanTree(uint64_t symbols, uint64_t *frequency) {
 
 HuffmanTree::HuffmanTree(uint64_t symbols, uint64_t *bits, uint64_t len) {
   _symbols = symbols;
-  _leaves = new HuffmanTreeNode *[_symbols];
-  for (uint64_t i = 0; i < _symbols; i++) {
-    _leaves[i] = nullptr;
-  }
   BitReader reader = BitReader(bits, len);
   uint64_t w = 0;
   uint64_t s_size = _symbols - 1;
@@ -312,7 +307,6 @@ HuffmanTree::HuffmanTree(uint64_t symbols, uint64_t *bits, uint64_t len) {
 
 HuffmanTree::~HuffmanTree() {
   delete _root;
-  delete [] _leaves;
 }
 
 uint64_t HuffmanTree::size() {
@@ -320,13 +314,7 @@ uint64_t HuffmanTree::size() {
 }
 
 uint64_t HuffmanTree::leafSize() {
-  uint64_t size = 0;
-  for (uint64_t i = 0; i < _symbols; i++) {
-    if (_leaves[i]) {
-      size++;
-    }
-  }
-  return size;
+  return _leaves.size();
 }
 
 void HuffmanTree::encodeTree(uint64_t **bits_ptr, uint64_t *len_ptr) {
